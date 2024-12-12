@@ -5,10 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1ca7aa3a-c023-49cf-a230-81375536d1ee" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/classic_regression.py" beforeDir="false" afterPath="$PROJECT_DIR$/classic_regression.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/img.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tsne_plot.py" beforeDir="false" afterPath="$PROJECT_DIR$/tsne_plot.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -136,7 +134,7 @@
       <option name="presentableId" value="Default" />
       <updated>1733954503110</updated>
       <workItem from="1733954504302" duration="3727000" />
-      <workItem from="1733960113745" duration="12237000" />
+      <workItem from="1733960113745" duration="12369000" />
     </task>
     <servers />
   </component>
