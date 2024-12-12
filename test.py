@@ -257,3 +257,4 @@ if __name__ == '__main__':
         logger.info('\n')
         logger.error("An error occurred: %s", str(e), exc_info=True)
         sys.exit(1)
+        
