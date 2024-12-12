@@ -9,7 +9,7 @@ from torchvision import models, transforms
 def parse_option():
     parser = argparse.ArgumentParser('Extract the features of the images and save them as .pt file', add_help=False)
     parser.add_argument('--input-dir', type=str, required=True, help='Input path to the images, given as csv file')
-    parser.add_argument('--model', type=str, required=False, default='mobilenetv3', choices=['resnet18', 'mobilenetv3'],
+    parser.add_argument('--model', type=str, required=True, default='mobilenetv3', choices=['resnet18', 'mobilenetv3'],
                         help='Name of the model to extract features')
     parser.add_argument('--save-name', type=str, required=True, help='path to save the features, will be '
                                                                      'saved as {model}_{save_name}.pt')

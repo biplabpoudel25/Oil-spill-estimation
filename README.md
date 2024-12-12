@@ -30,7 +30,7 @@ Our solution combines the power of MobileNetV3 for feature extraction with a rob
 - Uncertainty quantification through bound predictions
 
 ![Model architecture](images/model.png)
-
+*Model architecture for oil spill concentration prediction using a pretrained MobileNetV3 and CNN regression. The model takes the fluorescence images and outputs the predicted concentration along with upper and lower interval values.*
 
 ## Installation
 1. Clone the repository
@@ -60,10 +60,10 @@ label,datapath
 ### Step 1: Feature extraction
 First, extract deep features from your image dataset using MobileNetV3:
 ```bash
-python extract_deep_features.py --input-dir <path_to_csv> --save-name <feature_save_name>
+python extract_deep_features.py --input-dir <path_to_csv> --model <Model Name> --save-name <feature_save_name> --batch_size 1
 ```
 
-The extracted features will be saved as:
+The extracted features will be saved in a dictionary as:
 ```python
 dict = {
     'features': features,  # Deep features from MobileNetV3
