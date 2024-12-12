@@ -84,17 +84,21 @@ Test the trained model on new, unseen data:
 python test.py --features-path <path_to_features> --batch-size 1 --trained-ckpt <trained_checkpoint> --log-dir <logfile-name>
 ```
 
+
 ## Results
 ![Result_1](images/exp_2_images.png)
 *Performance evaluation of our proposed architecture on oil spill concentration prediction across validation and test dataset for combined dataset experiment (Experiment 2). (a) True vs predicted concentration values for the test dataset (b) Root Mean Square Error (RMSE) distribution across ground truth concentrations of the test dataset.*
+
 
 ## Confidence interval estimation
 ![Confidence_interval](images/confidence_interval.png)
 *Confidence interval estimation plots for test data under (a) cross-dataset evaluation and (b) combined dataset evaluation. The shaded region represents the prediction intervals bounded by the upper (green) and lower (blue) confidence limits. Red points indicate individual test predictions, while the black dashed line denotes the average prediction for each ground truth values.*
 
+
 ## Mobile application interface
 ![Mobile_interface](images/mobile_app.png)
 *Screenshots of the mobile application interface. (a) Login page: Provides option for user authentication, including login, account creation (Sign Up), and password recovery. (b) Image upload interface: Allows users to upload oil spill images with options for deleting images, editing notes, modifying GPS-based location data, and uploading multiple images simultaneously. Prediction results are also displayed. (c) History interface: Displays a record of all uploaded images, their corresponding predictions, image tags and the uploaded date.*
+
 
 ## Webapp interface
 ![Web_interface](images/database.png)
