@@ -1,9 +1,10 @@
 import torch
 import numpy as np
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
-import matplotlib.pyplot as plt
+from utils import *
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
 
 
 def create_annotated_tsne(features, labels, max_samples=10000, pca_components=300,
@@ -134,12 +135,6 @@ def main(features_path):
 
     all_features = torch.stack(all_features)
     labels = torch.stack(labels)
-
-    # Normalize features
-    def min_max_normalize(features):
-        min_val = torch.min(features)
-        max_val = torch.max(features)
-        return (features - min_val) / (max_val - min_val)
 
     print("Normalizing features...")
     all_features = min_max_normalize(all_features)

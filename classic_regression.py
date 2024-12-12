@@ -129,7 +129,7 @@ def save_plot(y_test, combined_predictions):
     plt.xlabel('True label')
     plt.ylabel('Predicted label')
     plt.title('True vs Predicted Values')
-    plt.savefig('../logs/MB_NACO_ANCO_trained_ANCO_07_21_2024_MB_TEST.png')
+    plt.savefig('/TEST.png')
 
 
 def run_model(model, model_name, X_train, y_train, X_test, y_test, result_queue):

@@ -35,7 +35,8 @@ Our solution combines the power of MobileNetV3 for feature extraction with a rob
 ## Installation
 1. Clone the repository
 ```bash
-git clone https://github.com
+git clone https://github.com/biplabpoudel25/Oil-spill-estimation
+cd Oil-spill-estimation
 ```
 2. Create and activate conda environment
 ```bash
