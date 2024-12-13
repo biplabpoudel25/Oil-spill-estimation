@@ -8,6 +8,12 @@ Figure below demonstrates the systematic workflow of automated and real-time oil
 ![Oil Spill Detection Workflow](images/main_diagram.png)
 
 
+## Highlights
+- Real-time oil spill assessment via fluorescence imaging and deep learning.
+- Developed a mobile-web platform for rapid field assessment and data management.
+- Achieved R² = 0.9957 and RMSE = 9.28 on diverse oil spill concentration datasets. 
+- Meaningful confidence interval estimation enhances reliability of prediction.
+
 ## Model
 Our solution combines the power of MobileNetV3 for feature extraction with a robust regression model for oil spill concentration prediction.
 
