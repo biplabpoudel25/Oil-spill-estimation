@@ -1,21 +1,19 @@
-import time
-import torch
 import argparse
-import numpy as np
+import torch
 from utils import *
-from torch import nn
-from model import SimpleRegressionModel
-from collections import defaultdict
-from matplotlib import pyplot as plt
-from scipy.interpolate import make_interp_spline
 from torch.utils.data import DataLoader, TensorDataset
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+import pickle
+import matplotlib.font_manager as fm
+from model import *
+
+font_path = os.path.expanduser(r"./Times New Roman Bold.ttf")
+times_new_roman = fm.FontProperties(fname=font_path)
 
 
 def parse_option():
     parser = argparse.ArgumentParser('Perform test and save the results', add_help=False)
     parser.add_argument('--features-path', type=str, required=True, help='path to the deep features of images to test')
-    parser.add_argument('--batch-size', type=int, required=True, default=1, help='batch size of images')
+    parser.add_argument('--batch-size', type=int, required=False, default=64, help='batch size of images')
     parser.add_argument('--trained-ckpt', type=str, required=True, help='path to trained checkpoints')
     parser.add_argument('--log-dir', type=str, required=True, help='path to save the test log and results')
 
@@ -54,8 +52,6 @@ if __name__ == '__main__':
         for feature in features:
             if model_name in ['resnet18', 'mobilenetv3']:
                 feature = feature.view(-1)
-            else:
-                raise ValueError('Model not defined!!!')
 
             all_features.append(feature)
 
@@ -68,190 +64,189 @@ if __name__ == '__main__':
         test_dataset = TensorDataset(all_features, labels)
         data_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
 
-        C = all_features[0].shape[0]
-        model = SimpleRegressionModel(C)
+        # Restore the model and optimizer state
+        model = SimpleRegressionModel(input_size=47040)
         model.load_state_dict(torch.load(args.trained_ckpt))
+
+        # Load conformal parameters
+        conformal_path = os.path.join(
+            os.path.dirname(args.trained_ckpt),
+            f'conformal_params_{model_name}.pt'
+        )
+
+        try:
+            conformal_params = torch.load(conformal_path)
+            # Convert lists back to numpy arrays if needed
+            bins = np.array(conformal_params['bins'])
+            quantiles = np.array(conformal_params['quantiles'])
+            logger.info(f"Loaded conformal parameters from: {conformal_path}")
+        except Exception as e:
+            logger.error(f"Error loading conformal parameters: {e}")
+            logger.info("Attempting to load with safer method...")
+            try:
+                # Alternative loading method
+
+                with open(conformal_path, 'rb') as f:
+                    conformal_params = pickle.load(f)
+                bins = np.array(conformal_params['bins'])
+                quantiles = np.array(conformal_params['quantiles'])
+            except Exception as e2:
+                logger.error(f"Both loading methods failed. Error: {e2}")
+                sys.exit(1)
+
         model.to(device)
-        print(model)
-
         model.eval()
-        all_labels = []
-        all_lower_bounds = []
-        all_means = []
-        all_upper_bounds = []
 
-        # Dictionary to store predictions for each concentration
-        concentration_predictions = defaultdict(lambda: {
-            'true': [],
-            'predicted': [],
-            'rmse': [],
-            'lower': [],
-            'upper': []
-        })
+        # Get all predictions and confidence intervals in one pass
+        test_results = evaluate_with_local_conformal(
+            model, data_loader, bins, quantiles
+        )
 
-        with torch.no_grad():
-            for i, (images, labels) in enumerate(data_loader):
-                images, labels = images.to(device), labels.to(device)
+        # Extract all required metrics from test_results
+        all_labels = test_results['predictions']['true']
+        all_means = test_results['predictions']['mean']
+        all_lower_bounds = test_results['predictions']['lower']
+        all_upper_bounds = test_results['predictions']['upper']
 
-                outputs = model(images)
+        # Calculate overall metrics
+        test_r2 = test_results['r2']
+        test_rmse = test_results['rmse']
+        test_mae = mean_absolute_error(all_labels, all_means)
+        non_zero_mask = all_labels != 0
+        mape = np.mean(np.abs((all_labels[non_zero_mask] - all_means[non_zero_mask]) / all_labels[non_zero_mask])) * 100
 
-                # Separate and store predictions
-                predictions = outputs.cpu().numpy()
-                labels_np = labels.cpu().numpy()
+        # Create plots directory
+        plots_dir = os.path.join(args.log_dir, 'HUBER_plots')
+        os.makedirs(plots_dir, exist_ok=True)
 
-                # Store each type of prediction
-                all_labels.extend(labels_np)
-                all_lower_bounds.extend(predictions[:, 0])
-                all_means.extend(predictions[:, 1])
-                all_upper_bounds.extend(predictions[:, 2])
-
-                # Store predictions for each concentration
-                for label, pred in zip(labels_np, predictions):
-                    concentration_predictions[label]['true'].append(label)
-                    concentration_predictions[label]['predicted'].append(max(0, pred[1]))  # mean
-                    concentration_predictions[label]['lower'].append(max(0, pred[0]))  # lower bound
-                    concentration_predictions[label]['upper'].append(max(0, pred[2]))  # upper bound
-                    concentration_predictions[label]['rmse'].append(
-                        np.sqrt(mean_squared_error([label], [max(0, pred[1])]))
-                    )
-
-        # Convert to numpy arrays and handle negative values
-        all_labels = np.array(all_labels)
-        all_lower_bounds = np.maximum(0, np.array(all_lower_bounds))
-        all_means = np.maximum(0, np.array(all_means))
-        all_upper_bounds = np.maximum(0, np.array(all_upper_bounds))
-
-        test_r2 = r2_score(all_labels, all_means)
-        test_rmse = np.sqrt(mean_squared_error(all_labels, all_means))
-
-        # Create DataFrame
-        df = pd.DataFrame({
-            'True Value': all_labels,
-            'Mean': all_means,
-            'Interval': [f'[{low:.2f} - {up:.2f}]'
-                         for low, up in zip(all_lower_bounds, all_upper_bounds)]
-        })
-
-        # Log the DataFrame
-        logger.info('\nDataFrame Contents:\n%s', df.to_string(index=False))
-
-        # Calculate average RMSE for each concentration
-        concentration_rmse = {
-            conc: np.mean(data['rmse'])
-            for conc, data in concentration_predictions.items()
-        }
-
-        # Sort values for the true line
-        sorted_indices = np.argsort(all_labels)
-        sorted_true = all_labels[sorted_indices]
-        sorted_predicted = all_means[sorted_indices]
-
-        # 1. Plot true vs Predicted scatter plot
+        # 1. True vs Predicted Plot
         plt.figure(figsize=(8, 6))
-        plt.plot(sorted_true, sorted_true, c='blue', alpha=0.7, label='True', linewidth=2)
+        plt.plot(all_labels, all_labels, c='blue', alpha=0.7, label='True', linewidth=2)
         plt.scatter(all_labels, all_means, c='red', alpha=0.7, s=10, label='Predicted')
-        plt.xlabel('Ground truth (mg/L)')
-        plt.ylabel('Predictions (mg/L)')
-        plt.legend()
+        plt.xlabel('Ground truth (mg/L)', fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+        plt.ylabel('Predictions (mg/L)', fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+
+        plt.xticks(fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+        plt.yticks(fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+
+        plt.legend(prop=times_new_roman)
         plt.grid(False)
         plt.tight_layout()
-        # plt.savefig(f'true_vs_pred_{model_name}.png', dpi=1200)
-        plt.show()
+        plt.savefig(os.path.join(plots_dir, f'true_vs_pred_{model_name}.png'), dpi=1200)
+        plt.close()
 
         # 2. RMSE vs Concentration Plot
-        concentrations = sorted(concentration_rmse.keys())
-        rmse_values = [concentration_rmse[c] for c in concentrations]
+        unique_concentrations = np.unique(all_labels)
+        concentration_rmse = {}
+        for conc in unique_concentrations:
+            mask = all_labels == conc
+            conc_predictions = all_means[mask]
+            conc_true = all_labels[mask]
+            concentration_rmse[conc] = np.sqrt(mean_squared_error(conc_true, conc_predictions))
 
         plt.figure(figsize=(8, 6))
-        plt.bar(concentrations, rmse_values, width=1.0, color='red')
+        plt.bar(list(concentration_rmse.keys()), list(concentration_rmse.values()), width=1.0, color='red')
         plt.axhline(y=test_rmse, color='blue', linestyle='--')
-        plt.xlabel('Ground truths (mg/L)')
-        plt.ylabel('Average RMSE')
-        # plt.legend()
+        plt.xlabel('Ground truths (mg/L)', fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+        plt.ylabel('Average RMSE', fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+
+        plt.xticks(fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+        plt.yticks(fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+
         plt.tight_layout()
-        # plt.savefig(f'average_RMSE_{model_name}.png', dpi=1200)
-        plt.show()
+        plt.savefig(os.path.join(plots_dir, f'average_RMSE_{model_name}.png'), dpi=1200)
+        plt.close()
 
         # 3. Box Plot
-        # Define concentration values
         concentrations = [0, 10, 20, 50, 80, 100, 150, 200, 250, 300, 350, 400, 450, 500]
-        predictions_by_concentration = []
-
-        # Group predictions by concentration
-        for conc in concentrations:
-            mask = all_labels == conc
-            if np.any(mask):
-                predictions_by_concentration.append(all_means[mask])
-            else:
-                predictions_by_concentration.append([])
+        predictions_by_concentration = [all_means[all_labels == conc] for conc in concentrations]
 
         plt.figure(figsize=(8, 6))
         plt.boxplot(predictions_by_concentration, labels=concentrations, patch_artist=True, widths=0.4)
-        plt.xlabel('Ground truth (mg/L)')
-        plt.ylabel('Predictions (mg/L)')
+        plt.xlabel('Ground truth (mg/L)', fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+        plt.ylabel('Predictions (mg/L)', fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+
+        plt.xticks(fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+        plt.yticks(fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+
         plt.tight_layout()
-        # plt.savefig(f'predicted_boxx_plot_{model_name}.png', dpi=1200)
-        plt.show()
+        plt.savefig(os.path.join(plots_dir, f'predicted_box_plot_{model_name}.png'), dpi=1200)
+        plt.close()
 
-        # 4. plot the confidence interval
-        # Sort all data by true values for continuous lines
-        sort_idx = np.argsort(all_labels)
-        sorted_labels = all_labels[sort_idx]
-        sorted_means = all_means[sort_idx]
-        sorted_lower = all_lower_bounds[sort_idx]
-        sorted_upper = all_upper_bounds[sort_idx]
+        indices_file = None
+        ci_metrics = plot_smooth_ci(all_labels, all_means, all_lower_bounds, all_upper_bounds,
+                                    model_name, plots_dir, font=times_new_roman, indices_file=indices_file)
 
-        # Remove duplicates by averaging y values for same x values
-        unique_labels = np.unique(sorted_labels)
-        averaged_means = np.array([np.mean(sorted_means[sorted_labels == x]) for x in unique_labels])
-        averaged_lower = np.array([np.mean(sorted_lower[sorted_labels == x]) for x in unique_labels])
-        averaged_upper = np.array([np.mean(sorted_upper[sorted_labels == x]) for x in unique_labels])
+        # Print metrics
+        print(f"Overall Test RMSE: {test_rmse:.4f}")
+        print(f"R2 Score: {test_r2}")
+        print(f"MAE: {test_mae:.4f}")
+        print(f"MAPE: {mape}")
 
-        # Create smooth spline functions
-        x_smooth = np.linspace(sorted_labels.min(), sorted_labels.max(), 300)  # Automatically span the entire range
-        spl_lower = make_interp_spline(unique_labels, averaged_lower, k=2)
-        spl_upper = make_interp_spline(unique_labels, averaged_upper, k=2)
-        spl_means = make_interp_spline(unique_labels, averaged_means, k=2)
+        unique_concentrations = np.sort(np.unique(all_labels))
+        selected_concentrations = unique_concentrations[::2]  # Take every other concentration
 
-        # Generate smooth curves
-        lower_smooth = spl_lower(x_smooth)
-        upper_smooth = spl_upper(x_smooth)
-        mean_smooth = spl_means(x_smooth)
+        sampled_indices = []
+        for conc in selected_concentrations:
+            conc_indices = np.where(all_labels == conc)[0]
+            sampled_indices.append(np.random.choice(conc_indices, 1)[0])
 
-        # Plot confidence bounds with filled region
+        sampled_indices = np.array(sampled_indices)
+
+        # Get values for sampled points
+        true_conc = all_labels[sampled_indices]
+        residuals = all_labels[sampled_indices] - all_means[sampled_indices]
+        lower_res = all_lower_bounds[sampled_indices] - all_means[sampled_indices]
+        upper_res = all_upper_bounds[sampled_indices] - all_means[sampled_indices]
+
         plt.figure(figsize=(8, 6))
-        plt.fill_between(x_smooth, lower_smooth, upper_smooth, color='blue', alpha=0.2)
-        plt.plot(x_smooth, lower_smooth, 'b-', alpha=0.7, label='Lower Bound', linewidth=2)
-        plt.plot(x_smooth, upper_smooth, 'g-', alpha=0.7, label='Upper Bound', linewidth=2)
 
-        # Plot mean predictions
-        plt.scatter(all_labels, all_means, color='red', s=10,
-                    alpha=0.8, label='Predictions')
+        # Plot confidence intervals
+        plt.vlines(x=true_conc, ymin=lower_res, ymax=upper_res,
+                   color='gray', alpha=0.4, linewidth=4, label='95% Confidence Interval')
 
-        # Plot average prediction line
-        plt.plot(x_smooth, mean_smooth, 'black', linestyle='--',
-                 linewidth=2, label='Average Prediction')
+        # Plot arrows and collect handles for legend
+        within_ci_arrow = None
+        outside_ci_arrow = None
 
-        plt.xlabel('Ground truth (mg/L)')
-        plt.ylabel('Predictions (mg/L)')
+        for i, conc in enumerate(true_conc):
+            residual = residuals[i]
+            within_ci = (lower_res[i] <= residual) and (residual <= upper_res[i])
+            color = 'green' if within_ci else 'red'
 
-        # Set axes limits explicitly with padding
-        plt.xlim(-20, 520)  # Adjust x-axis padding
-        plt.ylim(-20, 580)  # Adjust y-axis padding
-        plt.legend()
+            arrow = plt.arrow(x=conc, y=0, dx=0, dy=residual,
+                              color=color, head_width=8, head_length=2,
+                              length_includes_head=True, zorder=3)
+
+            if within_ci and within_ci_arrow is None:
+                within_ci_arrow = arrow
+            elif not within_ci and outside_ci_arrow is None:
+                outside_ci_arrow = arrow
+
+        plt.axhline(0, color='black', linestyle='--', linewidth=0.8, label='Zero Residual')
+
+        # Create legend
+        legend_elements = [
+            plt.Line2D([0], [0], color='gray', alpha=0.4, linewidth=4, label='95% Confidence Interval'),
+            plt.Line2D([0], [0], color='black', linestyle='--', label='Zero Residual')
+        ]
+
+        if within_ci_arrow is not None:
+            legend_elements.append(plt.Line2D([0], [0], color='green', label='Within CI'))
+        if outside_ci_arrow is not None:
+            legend_elements.append(plt.Line2D([0], [0], color='red', label='Outside CI'))
+
+        plt.legend(handles=legend_elements, loc='upper left', prop=times_new_roman)
+        plt.xlabel('Ground truth (mg/L)', fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+        plt.ylabel('Residual (True - Predicted)', fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+
+        plt.xticks(fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+        plt.yticks(fontsize=12, fontweight='bold', fontproperties=times_new_roman)
+
+        plt.grid(False)
         plt.tight_layout()
-        # plt.savefig(f'confidence_interval_{model_name}.png', dpi=1200)
-        plt.show()
-
-        test_mae = mean_absolute_error(all_labels, all_means)
-        non_zero_mask = all_labels != 0
-        mape = np.mean(
-            np.abs((all_labels[non_zero_mask] - all_means[non_zero_mask]) / all_labels[non_zero_mask])) * 100
-
-        logger.info(f"Overall Test RMSE: {test_rmse:.4f}")
-        logger.info(f"R2 Score: {test_r2:.4f}")
-        logger.info(f"MAE: {test_mae:.4f}")
-        logger.info(f"MAPE: {mape:.4f}")
+        plt.savefig(os.path.join(plots_dir, f'HUBER_residual_plot_{model_name}.png'), dpi=1200)
+        plt.close()
 
     except Exception as e:
         logger.info('\n')

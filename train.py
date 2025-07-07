@@ -1,26 +1,31 @@
-import time
-import torch
 import argparse
-import numpy as np
-from utils import *
+import time
 from tqdm import tqdm
-from model import SimpleRegressionModel, HuberLoss
-from sklearn.metrics import r2_score, mean_squared_error
+import torch
+from utils import *
 from torch.utils.data import TensorDataset, DataLoader, random_split
+import matplotlib.font_manager as fm
+from model import *
+
+font_path = os.path.expanduser(r"./Times New Roman Bold.ttf")
+times_new_roman = fm.FontProperties(fname=font_path)
 
 
 def parse_option():
     parser = argparse.ArgumentParser('Perform training and save the trained checkpoints', add_help=False)
+
     parser.add_argument('--features-path', type=str, required=True, help='path to the deep features of images')
     parser.add_argument('--model-name', type=str, required=True, default='mobilenetv3', choices=['resnet18', 'mobilenetv3'],
                         help='Name of the model to extract features')
     parser.add_argument('--batch-size', type=int, required=True, default=64, help='batch size of images')
-    parser.add_argument('--num-epochs', type=int, required=True, default=1000, help='Num of epochs to train model')
+    parser.add_argument('--num-epochs', type=int, required=True, default=4000, help='Num of epochs to train model')
     parser.add_argument('--log-dir', type=str, required=True, help='path to save the training log')
     parser.add_argument('--ckpt-name', type=str, required=True, help='name to save model checkpoint')
 
+
     args, unparsed = parser.parse_known_args()
     return args
+
 
 
 if __name__ == '__main__':
@@ -52,10 +57,10 @@ if __name__ == '__main__':
         print(model_name)
 
         all_features = []
-
         for feature in features:
             if model_name in ['resnet18', 'mobilenetv3']:
                 feature = feature.view(-1)
+
             all_features.append(feature)
 
         all_features = torch.stack(all_features)
@@ -69,28 +74,30 @@ if __name__ == '__main__':
         # Define the dataset
         dataset = TensorDataset(all_features, labels)
 
-        # Calculate the sizes for training and validation splits
-        train_size = int(0.8 * len(dataset))
-        val_size = len(dataset) - train_size
+        # Using 70% for training, 15% for validation, 15% for calibration
+        train_size = int(0.7 * len(dataset))
+        val_size = int(0.15 * len(dataset))
+        calib_size = len(dataset) - train_size - val_size
 
-        # Split the dataset into training and validation sets
-        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+        train_dataset, val_dataset, calib_dataset = random_split(
+            dataset,
+            [train_size, val_size, calib_size]
+        )
 
-        # Create DataLoaders for training and validation
+        # Create DataLoaders
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
+        calib_loader = DataLoader(calib_dataset, batch_size=args.batch_size, shuffle=False)
 
         C = all_features[0].shape[0]
 
         model = SimpleRegressionModel(C)
-
         model.to(device)
 
         params = count_trainable_parameters(model)
         print(f'Number of trainable parameters: {params}')
 
         criterion = HuberLoss(delta=5.0)
-
         optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, weight_decay=5e-3)
 
         train_losses = []
@@ -107,17 +114,10 @@ if __name__ == '__main__':
             for i, (images, labels) in enumerate(train_loader):
                 images, labels = images.to(device), labels.to(device)
 
-                labels_expanded = torch.zeros((labels.shape[0], 3), device=device)
-                mean = labels.to(device)
-
-                margin = 0.15 * torch.abs(mean)
-                labels_expanded[:, 0] = mean - margin  # lower bound
-                labels_expanded[:, 1] = mean  # mean
-                labels_expanded[:, 2] = mean + margin  # upper bound
-
                 outputs = model(images)
+                outputs = outputs.squeeze()
 
-                loss = criterion(outputs, labels_expanded)
+                loss = criterion(outputs, labels)
 
                 # Backward and optimize
                 optimizer.zero_grad()
@@ -140,24 +140,21 @@ if __name__ == '__main__':
                 for i, (images, labels) in enumerate(val_loader):
                     images, labels = images.to(device), labels.to(device)
 
-                    labels_expanded = torch.zeros((labels.shape[0], 3), device=device)
-                    mean = labels.to(device)
-                    margin = 0.15 * torch.abs(mean)
-                    labels_expanded[:, 0] = mean - margin
-                    labels_expanded[:, 1] = mean
-                    labels_expanded[:, 2] = mean + margin
-
                     outputs = model(images)
-                    loss = criterion(outputs, labels_expanded)
+                    outputs = outputs.squeeze()
+                    loss = criterion(outputs, labels)
                     val_loss += loss.item()
 
-                    # Store labels
-                    all_labels.extend(labels.cpu().numpy().tolist())
+                    if torch.is_tensor(outputs):
+                        all_labels.extend(labels.cpu().numpy().tolist())
 
-                    # Separate and store predictions
-                    predictions = outputs.cpu().numpy()
-
-                    all_means.extend(predictions[:, 1])
+                        if outputs.dim() > 0:
+                            all_means.extend(outputs.cpu().numpy().tolist())
+                        else:
+                            all_means.append(outputs.item())
+                    else:
+                        all_labels.append(labels.cpu().numpy().item())
+                        all_means.append(outputs)
 
             # Store average val loss for the epoch
             avg_val_loss = val_loss / len(val_loader)
@@ -179,10 +176,56 @@ if __name__ == '__main__':
 
             # Save the best model checkpoint
             if val_rmse_mean < best_val_rmse:
+
                 best_val_rmse = val_rmse_mean
                 ckpt_path = save_checkpoint(model, args.ckpt_name, model_name)
                 logger.info(f'Best checkpoint saved at epoch: {epoch + 1} at {ckpt_path}.')
 
+        # After training, fit conformal predictor on calibration set
+        logger.info("\nFitting conformal predictor on calibration set...")
+        bins, quantiles = fit_local_conformal_predictor(
+            model,
+            calib_loader,
+            n_bins=10,
+            alpha=0.05,
+            device=device
+        )
+
+        # Save conformal prediction parameters
+        conformal_params = {
+            'bins': bins,
+            'quantiles': quantiles
+        }
+
+        conformal_path = os.path.join(
+            os.path.dirname(ckpt_path),
+            f'conformal_params_{model_name}.pt'
+        )
+        torch.save(conformal_params, conformal_path)
+        logger.info(f'Conformal prediction parameters saved at: {conformal_path}')
+
+        # Evaluate conformal predictions on calibration set
+        logger.info("\nEvaluating conformal predictions on calibration set...")
+        calib_results = evaluate_with_local_conformal(
+            model,
+            calib_loader,
+            bins,
+            quantiles,
+            device=device
+        )
+
+        # Log the evaluation metrics
+        logger.info("\nConformal Prediction Performance on Calibration Set:")
+        logger.info(f"R2 Score: {calib_results['r2']:.4f}")
+        logger.info(f"RMSE: {calib_results['rmse']:.4f}")
+        logger.info(f"95% CI Coverage: {calib_results['coverage']:.2f}%")
+        logger.info(f"Average CI Width: {calib_results['ci_width']:.4f}")
+
+        # Log metrics by concentration range
+        logger.info("\nMetrics by Concentration Range:")
+        logger.info("\n" + str(calib_results['bin_metrics']))
+
+        # Log total training time
         time_end = time.time()
         time_taken = time_end - time_start
         total_time = compute_time(time_taken)

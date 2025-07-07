@@ -11,9 +11,8 @@ class SimpleRegressionModel(nn.Module):
         self.dropout1 = nn.Dropout(p=0.1)
         self.fc2 = nn.Linear(512, 256)
         self.dropout2 = nn.Dropout(p=0.1)
-
-        # Output 3 values: lower bound, mean, upper bound
-        self.fc3 = nn.Linear(256, 3)
+        # Output single value for concentration prediction
+        self.fc3 = nn.Linear(256, 1)
 
     def forward(self, x):
         x = self.flatten(x)
