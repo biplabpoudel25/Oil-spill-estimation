@@ -1,6 +1,5 @@
-# RReal-Time Oil Spill Concentration Assessment through Fluorescence Imaging and Deep Learning
+# Real-Time Oil Spill Concentration Assessment through Fluorescence Imaging and Deep Learning
 This is the official repository of the paper: _**Real-Time Oil Spill Concentration Assessment through Fluorescence Imaging and Deep Learning**._ This paper presents a pioneering approach to automated oil spill assessment, combining fluorescence imaging with deep learning, and digital platform integration to achieve unprecedented accuracy, accessibility, and efficiency.The system’s ability to provide real-time predictions with meaningful confidence intervals, coupled with its accessibility through mobile and web platforms, makes a significant advancement in environmental monitoring technology. The robust performance of proposed MobileNetV3 based approach across different oil types and concentration ranges, particularly at lower concentrations critical for early detection, establishes this technology as an invaluable tool for environmental protection and emergency response. By integrating the deep learning model into user-friendly platforms, the system ensures real-time field applicability while supporting scalable data management. 
-
 
 ## Overview
 Figure below demonstrates the systematic workflow of automated real-time oil spill concentration prediction using our approach. 
