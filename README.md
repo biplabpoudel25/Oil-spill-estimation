@@ -1,18 +1,18 @@
-# Real-time oil spill concentration assessment using fluorescence imaging and deep learning
-This is the official repository of the paper: _**Real-time oil spill concentration assessment using fluorescence imaging and deep learning**._ This paper presents a pioneering approach to automated oil spill assessment, combining fluorescence imaging with deep learning, and digital platform integration to achieve unprecedented accuracy, accessibility, and efficiency.The system’s ability to provide real-time predictions with meaningful confidence intervals, coupled with its accessibility through mobile and web platforms, makes a significant advancement in environmental monitoring technology. The robust performance of proposed MobileNetV3 based approach across different oil types and concentration ranges, particularly at lower concentrations critical for early detection, establishes this technology as an invaluable tool for environmental protection and emergency response. By integrating the deep learning model into user-friendly platforms, the system ensures real-time field applicability while supporting scalable data management. 
+# RReal-Time Oil Spill Concentration Assessment through Fluorescence Imaging and Deep Learning
+This is the official repository of the paper: _**Real-Time Oil Spill Concentration Assessment through Fluorescence Imaging and Deep Learning**._ This paper presents a pioneering approach to automated oil spill assessment, combining fluorescence imaging with deep learning, and digital platform integration to achieve unprecedented accuracy, accessibility, and efficiency.The system’s ability to provide real-time predictions with meaningful confidence intervals, coupled with its accessibility through mobile and web platforms, makes a significant advancement in environmental monitoring technology. The robust performance of proposed MobileNetV3 based approach across different oil types and concentration ranges, particularly at lower concentrations critical for early detection, establishes this technology as an invaluable tool for environmental protection and emergency response. By integrating the deep learning model into user-friendly platforms, the system ensures real-time field applicability while supporting scalable data management. 
 
 
 ## Overview
-Figure below demonstrates the systematic workflow of automated and real-time oil spill concentration prediction using our approach. 
+Figure below demonstrates the systematic workflow of automated real-time oil spill concentration prediction using our approach. 
 
-![Oil Spill Detection Workflow](images/main_diagram.png)
-
+![Oil Spill Detection Workflow](images/graphical_abstract.png)
 
 ## Highlights
-- Real-time oil spill assessment via fluorescence imaging and deep learning.
-- Developed a mobile-web platform for rapid field assessment and data management.
-- Achieved R² = 0.9957 and RMSE = 9.28 on diverse oil spill concentration datasets. 
-- Meaningful confidence interval estimation enhances reliability of prediction.
+- Accurately estimates oil concentration using compact, low-cost imaging and AI tools.
+- Mobile and cloud platforms enable rapid, decentralized field assessment.
+- Achieved R² = 0.9958 and RMSE = 9.28 on diverse oil spill concentration datasets. 
+- Quantifies prediction uncertainty using 95% confidence interval estimation.
+- Democratize spill assessment from specialized labs to field operators.
 
 ## Model
 Our solution combines the power of MobileNetV3 for feature extraction with a robust regression model for oil spill concentration prediction.
@@ -94,12 +94,12 @@ python test.py --features-path <path_to_features> --batch-size 1 --trained-ckpt 
 
 ## Results
 ![Result_1](images/exp_2_images.png)
-*Performance evaluation of our proposed architecture on oil spill concentration prediction across validation and test dataset for combined dataset experiment (Experiment 2). (a) True vs predicted concentration values for the test dataset (b) Root Mean Square Error (RMSE) distribution across ground truth concentrations of the test dataset.*
+*Performance evaluation of the proposed approach on oil concentration prediction using the test dataset from combined dataset experiment (Experiment 2). (a) Scatter plot comparing predicted concentrations (red dots) with ground truth values (blue line). The x-axis shows the true oil concentrations in mg/L, and the y-axis represents predicted values in mg/L. (b) Bar plot showing RMSE for each ground truth concentration on the test dataset. The x-axis displays true concentration levels (mg/L), and the y-axis shows RMSE values (mg/L). Red bars represent average RMSE at each individual concentration, while the blue dashed horizontal line indicates the average RMSE across the dataset.*
 
 
 ## Confidence interval estimation
-![Confidence_interval](images/confidence_interval.png)
-*Confidence interval estimation plots for test data under (a) cross-dataset evaluation and (b) combined dataset evaluation. The shaded region represents the prediction intervals bounded by the upper (green) and lower (blue) confidence limits. Red points indicate individual test predictions, while the black dashed line denotes the average prediction for each ground truth values.*
+![Confidence_interval](images/confidence_interval_plot.png)
+*Evaluation of the proposed model’s predictive performance on Experiment 2 using 95 % confidence interval estimation and residual analysis. (a) Confidence interval plot showing predicted concentrations (red dots) along the y-axis against ground truth values on the x-axis (mg/L). The blue line represents the lower bound, the green line represents the upper bound of the 95 % confidence interval, and the blue shaded region denotes the prediction interval. The black dashed line indicates ideal predictions where predicted equals true values. (b) Residual distribution plot showing residuals (true – predicted) on the y-axis against ground truth concentrations (mg/L) on the x-axis. Grey bars represent the width of the 95 % confidence interval at each concentration. Green triangles denote predictions within the confidence interval, while red triangles indicate outliers. The black dashed horizontal line marks zero residuals (perfect prediction baseline).*
 
 
 ## Mobile application interface
